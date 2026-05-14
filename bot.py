@@ -1,8 +1,6 @@
 import os
 import pandas as pd
 from datetime import datetime
-from flask import Flask, send_file
-import threading
 
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import (
@@ -12,13 +10,8 @@ from telegram.ext import (
     ContextTypes,
 )
 
-# ============================================
-# CONFIGURATION
-# ============================================
-
-# 🔑 GET YOUR BOT TOKEN FROM ENVIRONMENT VARIABLE (Railway)
+# 🔑 GET YOUR BOT TOKEN FROM ENVIRONMENT VARIABLE
 TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "8995182920:AAGs3WrTmGPpTO7FpDC32-mJgOfVdLLY5mA")
-")
 
 # ---------------------------
 # CREATE CSV IF NOT EXISTS
@@ -77,15 +70,12 @@ async def stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     stem_count = len(df[df['group'] == 'STEM'])
     nonstem_count = len(df[df['group'] == 'NON-STEM'])
-    avg_score = df['score'].mean() if 'score' in df.columns else 0
     
     await update.message.reply_text(
         f"📊 STUDY STATISTICS\n\n"
         f"Total responses: {len(df)}\n"
         f"STEM students: {stem_count}\n"
-        f"NON-STEM students: {nonstem_count}\n"
-        f"Average phishing susceptibility score (0-5): {avg_score:.2f}\n\n"
-        f"Higher score means more susceptible to phishing."
+        f"NON-STEM students: {nonstem_count}"
     )
 
 
@@ -268,27 +258,6 @@ async def question_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 # ---------------------------
-# FLASK DOWNLOAD SERVER (for getting your data)
-# ---------------------------
-download_app = Flask(__name__)
-
-@download_app.route('/download')
-def download_data():
-    """Download the CSV file with all responses"""
-    return send_file("data.csv", as_attachment=True, download_name='phishing_study_data.csv')
-
-@download_app.route('/')
-def home():
-    return "Phishing Study Bot is running! Visit /download to get your data."
-
-def run_download_server():
-    download_app.run(host='0.0.0.0', port=8080)
-
-# Start the download server in a background thread
-threading.Thread(target=run_download_server, daemon=True).start()
-
-
-# ---------------------------
 # MAIN FUNCTION
 # ---------------------------
 def main():
@@ -299,8 +268,7 @@ def main():
     app.add_handler(CallbackQueryHandler(group_handler, pattern="^(STEM|NON-STEM)$"))
     app.add_handler(CallbackQueryHandler(question_handler, pattern="^(?!STEM|NON-STEM$).*"))
     
-    print("🤖 Bot is running with 19 questions and download endpoint...")
-    print("📊 Visit YOUR_RAILWAY_URL:8080/download to get your data")
+    print("🤖 Bot is running with 19 questions... Press Ctrl+C to stop.")
     app.run_polling()
 
 
