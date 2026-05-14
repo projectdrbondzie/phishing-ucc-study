@@ -1,6 +1,8 @@
 import os
 import pandas as pd
 from datetime import datetime
+from flask import Flask, send_file
+import threading
 
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import (
@@ -10,8 +12,12 @@ from telegram.ext import (
     ContextTypes,
 )
 
-# 🔑 PUT YOUR BOT TOKEN HERE
-TOKEN = "8995182920:AAGs3WrTmGPpTO7FpDC32-mJgOfVdLLY5mA"  # <--- REPLACE WITH YOUR REAL TOKEN
+# ============================================
+# CONFIGURATION
+# ============================================
+
+# 🔑 GET YOUR BOT TOKEN FROM ENVIRONMENT VARIABLE (Railway)
+TOKEN = os.environ.get("8995182920:AAGs3WrTmGPpTO7FpDC32-mJgOfVdLLY5mA", "")
 
 
 # ---------------------------
@@ -24,8 +30,7 @@ CSV_COLUMNS = [
     "received_suspicious", "prior_compromise", "prior_training",
     "scenario_1_response", "scenario_2_response", "scenario_3_response",
     "scenario_4_response", "scenario_5_response",
-    "uses_2fa", "shares_password", "report_suspicious",
-    "submission_time"
+    "uses_2fa", "shares_password", "report_suspicious", "submission_time", "score"
 ]
 
 if not os.path.exists("data.csv"):
@@ -56,6 +61,31 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "All responses are anonymous and confidential.\n\n"
         "Please select your academic group:",
         reply_markup=InlineKeyboardMarkup(keyboard),
+    )
+
+
+# ---------------------------
+# STATS COMMAND - Check response count
+# ---------------------------
+async def stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Show statistics about responses collected"""
+    df = pd.read_csv("data.csv")
+    
+    if len(df) == 0:
+        await update.message.reply_text("📊 No responses collected yet.")
+        return
+    
+    stem_count = len(df[df['group'] == 'STEM'])
+    nonstem_count = len(df[df['group'] == 'NON-STEM'])
+    avg_score = df['score'].mean() if 'score' in df.columns else 0
+    
+    await update.message.reply_text(
+        f"📊 STUDY STATISTICS\n\n"
+        f"Total responses: {len(df)}\n"
+        f"STEM students: {stem_count}\n"
+        f"NON-STEM students: {nonstem_count}\n"
+        f"Average phishing susceptibility score (0-5): {avg_score:.2f}\n\n"
+        f"Higher score means more susceptible to phishing."
     )
 
 
@@ -186,6 +216,12 @@ async def question_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         answers = user_sessions[user_id]["answers"]
         answers["submission_time"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         
+        # Calculate score (count how many times user clicked phishing links)
+        score = 0
+        for i in range(1, 6):
+            if answers.get(f"scenario{i}", "") == "clicked":
+                score += 1
+        
         # Prepare row for CSV
         row = {
             "user_id": query.from_user.id,
@@ -213,6 +249,7 @@ async def question_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "shares_password": answers.get("shares_password", ""),
             "report_suspicious": answers.get("report_suspicious", ""),
             "submission_time": answers.get("submission_time", ""),
+            "score": score,
         }
         
         df = pd.read_csv("data.csv")
@@ -231,16 +268,39 @@ async def question_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 # ---------------------------
+# FLASK DOWNLOAD SERVER (for getting your data)
+# ---------------------------
+download_app = Flask(__name__)
+
+@download_app.route('/download')
+def download_data():
+    """Download the CSV file with all responses"""
+    return send_file("data.csv", as_attachment=True, download_name='phishing_study_data.csv')
+
+@download_app.route('/')
+def home():
+    return "Phishing Study Bot is running! Visit /download to get your data."
+
+def run_download_server():
+    download_app.run(host='0.0.0.0', port=8080)
+
+# Start the download server in a background thread
+threading.Thread(target=run_download_server, daemon=True).start()
+
+
+# ---------------------------
 # MAIN FUNCTION
 # ---------------------------
 def main():
     app = Application.builder().token(TOKEN).build()
     
     app.add_handler(CommandHandler("start", start))
+    app.add_handler(CommandHandler("stats", stats))
     app.add_handler(CallbackQueryHandler(group_handler, pattern="^(STEM|NON-STEM)$"))
     app.add_handler(CallbackQueryHandler(question_handler, pattern="^(?!STEM|NON-STEM$).*"))
     
-    print("🤖 Bot is running with 19 questions... Press Ctrl+C to stop.")
+    print("🤖 Bot is running with 19 questions and download endpoint...")
+    print("📊 Visit YOUR_RAILWAY_URL:8080/download to get your data")
     app.run_polling()
 
 
