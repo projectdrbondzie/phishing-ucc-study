@@ -17,7 +17,7 @@ from telegram.ext import (
 # ============================================
 
 # 🔑 GET YOUR BOT TOKEN FROM ENVIRONMENT VARIABLE (Railway)
-TOKEN = os.environ.get("8995182920:AAGs3WrTmGPpTO7FpDC32-mJgOfVdLLY5mA", "")
+TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "8995182920:AAGs3WrTmGPpTO7FpDC32-mJgOfVdLLY5mA")
 
 
 # ---------------------------
