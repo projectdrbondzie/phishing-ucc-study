@@ -3,16 +3,34 @@ import pandas as pd
 from datetime import datetime
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, CallbackQueryHandler, ContextTypes
+from flask import Flask
+import threading
 
 # ============================================
-# CONFIGURATION
+# FAKE WEB SERVER FOR RENDER (KEEPS BOT ALIVE)
 # ============================================
+flask_app = Flask(__name__)
 
+@flask_app.route('/')
+def health_check():
+    return "Bot is alive and running!", 200
+
+def run_web_server():
+    port = int(os.environ.get('PORT', 10000))
+    flask_app.run(host='0.0.0.0', port=port)
+
+# Start web server in background
+threading.Thread(target=run_web_server, daemon=True).start()
+
+# ============================================
+# YOUR BOT TOKEN
+# ============================================
 TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "8665911975:AAHtyG2P-ECob4hQCIdKN0as9054lgrMm0I")
 
+# ============================================
 # YOUR TELEGRAM USER ID - ONLY YOU CAN USE /download
-# To find your ID: Telegram -> search @userinfobot -> send /start
-YOUR_USER_ID = 6955757619  # Replace with your actual Telegram user ID!
+# ============================================
+YOUR_USER_ID = 6955757619  # REPLACE WITH YOUR ACTUAL TELEGRAM USER ID!
 
 # ============================================
 # CREATE CSV IF NOT EXISTS
@@ -79,7 +97,6 @@ async def stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def download(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Send the CSV file to the researcher only"""
     
-    # Check if user is authorized
     if update.effective_user.id != YOUR_USER_ID:
         await update.message.reply_text("⛔ Access denied. This command is for researchers only.")
         return
@@ -231,13 +248,11 @@ async def scenario5_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     answers["scenario5"] = "clicked" if "clicked" in query.data else "safe"
     answers["submission_time"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     
-    # Calculate score
     score = 0
     for i in range(1, 6):
         if answers.get(f"scenario{i}", "") == "clicked":
             score += 1
     
-    # Save to CSV
     row = {
         "user_id": query.from_user.id,
         "username": query.from_user.username,
@@ -277,33 +292,29 @@ async def scenario5_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # MAIN FUNCTION
 # ============================================
 def main():
-    app = Application.builder().token(TOKEN).build()
+    telegram_app = Application.builder().token(TOKEN).build()
     
-    # Command handlers
-    app.add_handler(CommandHandler("start", start))
-    app.add_handler(CommandHandler("stats", stats))
-    app.add_handler(CommandHandler("download", download))  # PRIVATE - only you can use
+    telegram_app.add_handler(CommandHandler("start", start))
+    telegram_app.add_handler(CommandHandler("stats", stats))
+    telegram_app.add_handler(CommandHandler("download", download))
     
-    # Callback handlers
-    app.add_handler(CallbackQueryHandler(group_handler, pattern="^(STEM|NON-STEM)$"))
-    app.add_handler(CallbackQueryHandler(age_handler, pattern="^age_"))
-    app.add_handler(CallbackQueryHandler(gender_handler, pattern="^gender_"))
-    app.add_handler(CallbackQueryHandler(year_handler, pattern="^year_"))
-    app.add_handler(CallbackQueryHandler(programme_handler, pattern="^prog_"))
-    app.add_handler(CallbackQueryHandler(email_handler, pattern="^email_"))
-    app.add_handler(CallbackQueryHandler(mobile_handler, pattern="^mobile_"))
-    app.add_handler(CallbackQueryHandler(social_handler, pattern="^social_"))
-    app.add_handler(CallbackQueryHandler(knows_phishing_handler, pattern="^knows_"))
-    app.add_handler(CallbackQueryHandler(scenario1_handler, pattern="^s1_"))
-    app.add_handler(CallbackQueryHandler(scenario2_handler, pattern="^s2_"))
-    app.add_handler(CallbackQueryHandler(scenario3_handler, pattern="^s3_"))
-    app.add_handler(CallbackQueryHandler(scenario4_handler, pattern="^s4_"))
-    app.add_handler(CallbackQueryHandler(scenario5_handler, pattern="^s5_"))
+    telegram_app.add_handler(CallbackQueryHandler(group_handler, pattern="^(STEM|NON-STEM)$"))
+    telegram_app.add_handler(CallbackQueryHandler(age_handler, pattern="^age_"))
+    telegram_app.add_handler(CallbackQueryHandler(gender_handler, pattern="^gender_"))
+    telegram_app.add_handler(CallbackQueryHandler(year_handler, pattern="^year_"))
+    telegram_app.add_handler(CallbackQueryHandler(programme_handler, pattern="^prog_"))
+    telegram_app.add_handler(CallbackQueryHandler(email_handler, pattern="^email_"))
+    telegram_app.add_handler(CallbackQueryHandler(mobile_handler, pattern="^mobile_"))
+    telegram_app.add_handler(CallbackQueryHandler(social_handler, pattern="^social_"))
+    telegram_app.add_handler(CallbackQueryHandler(knows_phishing_handler, pattern="^knows_"))
+    telegram_app.add_handler(CallbackQueryHandler(scenario1_handler, pattern="^s1_"))
+    telegram_app.add_handler(CallbackQueryHandler(scenario2_handler, pattern="^s2_"))
+    telegram_app.add_handler(CallbackQueryHandler(scenario3_handler, pattern="^s3_"))
+    telegram_app.add_handler(CallbackQueryHandler(scenario4_handler, pattern="^s4_"))
+    telegram_app.add_handler(CallbackQueryHandler(scenario5_handler, pattern="^s5_"))
     
-    print("🤖 UCC Phishing Study Bot is running with full survey!")
-    print("📊 Data will be saved to data.csv automatically")
-    print("🔐 /download command is PRIVATE - only you can use it")
-    app.run_polling()
+    print("🤖 Bot is running...")
+    telegram_app.run_polling()
 
 if __name__ == "__main__":
     main()
