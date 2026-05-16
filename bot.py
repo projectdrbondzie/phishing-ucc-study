@@ -4,9 +4,19 @@ from datetime import datetime
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, CallbackQueryHandler, ContextTypes
 
+# ============================================
+# CONFIGURATION
+# ============================================
+
 TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "8665911975:AAHtyG2P-ECob4hQCIdKN0as9054lgrMm0I")
 
-# Create CSV if not exists
+# YOUR TELEGRAM USER ID - ONLY YOU CAN USE /download
+# To find your ID: Telegram -> search @userinfobot -> send /start
+YOUR_USER_ID = 6955757619  # Replace with your actual Telegram user ID!
+
+# ============================================
+# CREATE CSV IF NOT EXISTS
+# ============================================
 CSV_COLUMNS = [
     "user_id", "username", "group", "submission_time",
     "age", "gender", "year_of_study", "programme",
@@ -20,32 +30,73 @@ if not os.path.exists("data.csv"):
 
 user_sessions = {}
 
+# ============================================
+# START COMMAND
+# ============================================
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     user_sessions[user_id] = {"step": "group", "answers": {}}
     
-    keyboard = [[InlineKeyboardButton("📊 STEM", callback_data="STEM")], [InlineKeyboardButton("📚 NON-STEM", callback_data="NON-STEM")]]
+    keyboard = [
+        [InlineKeyboardButton("📊 STEM", callback_data="STEM")],
+        [InlineKeyboardButton("📚 NON-STEM", callback_data="NON-STEM")]
+    ]
+    
     await update.message.reply_text(
         "🎓 WELCOME TO THE UCC CYBER SECURITY STUDY 🎓\n\n"
         "This research compares phishing awareness between STEM and NON-STEM students.\n\n"
-        "✅ All responses are anonymous\n✅ Takes 3-4 minutes\n\n"
+        "✅ All responses are anonymous\n"
+        "✅ Takes 3-4 minutes\n\n"
         "Please select your academic group:",
         reply_markup=InlineKeyboardMarkup(keyboard)
     )
 
+# ============================================
+# STATS COMMAND - Anyone can see progress
+# ============================================
 async def stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
     df = pd.read_csv("data.csv")
+    
     if len(df) == 0:
         await update.message.reply_text("📊 No responses collected yet.")
         return
+    
     stem = len(df[df['group'] == 'STEM'])
     nonstem = len(df[df['group'] == 'NON-STEM'])
-    await update.message.reply_text(f"📊 STUDY PROGRESS\n\nTotal: {len(df)}\nSTEM: {stem}\nNON-STEM: {nonstem}")
+    avg_score = df['score'].mean() if 'score' in df.columns else 0
+    
+    await update.message.reply_text(
+        f"📊 STUDY PROGRESS 📊\n\n"
+        f"Total responses: {len(df)}\n"
+        f"STEM students: {stem}\n"
+        f"NON-STEM students: {nonstem}\n"
+        f"Average vulnerability score: {avg_score:.1f}/5"
+    )
 
 # ============================================
-# UNIQUE HANDLERS FOR EACH STEP
+# DOWNLOAD COMMAND - ONLY YOU CAN USE THIS
 # ============================================
+async def download(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Send the CSV file to the researcher only"""
+    
+    # Check if user is authorized
+    if update.effective_user.id != YOUR_USER_ID:
+        await update.message.reply_text("⛔ Access denied. This command is for researchers only.")
+        return
+    
+    try:
+        with open("data.csv", "rb") as f:
+            await update.message.reply_document(
+                document=f, 
+                filename=f"phishing_study_data_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
+            )
+        await update.message.reply_text("✅ Data file sent successfully!")
+    except Exception as e:
+        await update.message.reply_text(f"❌ Error: {e}")
 
+# ============================================
+# HANDLERS
+# ============================================
 async def group_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
@@ -215,7 +266,7 @@ async def scenario5_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await query.edit_message_text(
         f"✅ THANK YOU FOR COMPLETING THE STUDY! ✅\n\n"
         f"📊 Your phishing vulnerability score: {score}/5\n"
-        f"{'⚠️ Higher scores indicate more susceptibility to phishing' if score >= 3 else '✅ Lower scores indicate good phishing awareness'}\n\n"
+        f"{'⚠️ Higher scores indicate more susceptibility to phishing attacks' if score >= 3 else '✅ Lower scores indicate good phishing awareness'}\n\n"
         f"🔒 Your responses have been recorded anonymously.\n\n"
         f"This research will help improve cybersecurity education at UCC."
     )
@@ -228,10 +279,12 @@ async def scenario5_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 def main():
     app = Application.builder().token(TOKEN).build()
     
+    # Command handlers
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("stats", stats))
+    app.add_handler(CommandHandler("download", download))  # PRIVATE - only you can use
     
-    # All handlers with UNIQUE patterns
+    # Callback handlers
     app.add_handler(CallbackQueryHandler(group_handler, pattern="^(STEM|NON-STEM)$"))
     app.add_handler(CallbackQueryHandler(age_handler, pattern="^age_"))
     app.add_handler(CallbackQueryHandler(gender_handler, pattern="^gender_"))
@@ -248,6 +301,8 @@ def main():
     app.add_handler(CallbackQueryHandler(scenario5_handler, pattern="^s5_"))
     
     print("🤖 UCC Phishing Study Bot is running with full survey!")
+    print("📊 Data will be saved to data.csv automatically")
+    print("🔐 /download command is PRIVATE - only you can use it")
     app.run_polling()
 
 if __name__ == "__main__":
